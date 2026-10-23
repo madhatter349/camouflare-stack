@@ -41,6 +41,8 @@ grep -q 'card_drop' docker-compose.yaml 2>/dev/null || true
 grep -q 'cap_drop: \[ALL\]' docker-compose.yaml || fail "camouflare must drop all capabilities"
 grep -q 'no-new-privileges:true' docker-compose.yaml || fail "no-new-privileges required"
 grep -q 'shm_size: "2gb"' docker-compose.yaml || fail "shm_size required (Firefox dies on the 64MB default)"
+test -s conf/default.conf || fail "nginx config missing"
+grep -q "listen 8191" conf/default.conf || fail "nginx must listen on 8191"
 grep -q 'mehmetcansahin/camouflare:2.1.0' docker-compose.yaml || fail "camouflare image must be pinned, not :latest"
 grep -qE '^\s+ports:' docker-compose.yaml && fail "no published ports: Traefik reaches services over the network"
 grep -qE 'container_name:' docker-compose.yaml && fail "container_name breaks Coolify redeploys"
@@ -49,7 +51,7 @@ ok "compose guardrails"
 
 # 4. no secrets committed
 if grep -rInE '([A-Za-z0-9_-]{40,}|BEGIN [A-Z ]*PRIVATE KEY)' --include='*.yaml' --include='*.py' --include='*.template' . \
-   | grep -v 'PROWLARR_BASIC_AUTH' | grep -vE '^\S+:[0-9]+:\s*#'; then
+   | grep -v "basicauth.users" | grep -vE '^\S+:[0-9]+:\s*#'; then
   fail "possible secret committed"
 fi
 ok "no secrets in tree"

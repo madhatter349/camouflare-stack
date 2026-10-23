@@ -45,11 +45,13 @@ services:
     networks: [arr]
 
   camouflare-auth:
-    image: nginx:1.27-alpine
+    # Config is baked into the image: Coolify drops relative bind mounts, and
+    # the stock nginx config would listen on :80 instead of :8191.
+    build:
+      context: ./conf
+    image: camouflare-auth:local
     restart: unless-stopped
     depends_on: [camouflare]
-    volumes:
-      - ./conf:/etc/nginx/templates:ro
     expose: ["8191"]
     networks: [arr, coolify]
     labels:
@@ -109,7 +111,9 @@ services:
       - traefik.http.routers.pl-https.tls=true
       - traefik.http.routers.pl-https.tls.certresolver=letsencrypt
       - traefik.http.routers.pl-https.middlewares=pl-auth
-      - traefik.http.middlewares.pl-auth.basicauth.users=${PROWLARR_BASIC_AUTH:?set PROWLARR_BASIC_AUTH in Coolify env}
+      # Hash only; the password lives in /data/prowlarr/credentials.env on the host.
+      # Inlined because Coolify escapes ${...} inside labels, so it cannot be an env ref.
+      - traefik.http.middlewares.pl-auth.basicauth.users=admin:$apr1$FCDsI.f6$2Fhlks104HB6AvOqXkAIr0
       - traefik.http.routers.pl-https.service=pl-svc
       - traefik.http.services.pl-svc.loadbalancer.server.port=9696
 
