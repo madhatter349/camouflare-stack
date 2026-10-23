@@ -1,16 +1,19 @@
 # Camouflare 2.1.0 — FlareSolverr-compatible browser service.
 #
 # Deployed by Coolify from this repo as a docker-compose resource.
+# Domains are configured in Coolify (docker_compose_domains), which generates the
+# Traefik routers. Do not hand-write routers here: they would collide.
 #
 #   public   https://camouflare.382972.xyz -> camouflare-auth:8191 -> camouflare:8191
 #                                              (bearer token still enforced by the app)
 #   private  camouflare-shim:8192          -> token injected, null proxy stripped
 #                                              (for Prowlarr / Jackett)
-#   public   https://prowlarr.382972.xyz   -> prowlarr:9696 (Traefik basic auth)
+#   public   https://prowlarr.382972.xyz   -> prowlarr:9696
 #
-# camouflare is deliberately NOT on the `coolify` bridge. That bridge carries ~50
-# other containers and this service fetches caller-supplied URLs, so sharing it
-# let a token holder read http://coolify:8080. Only the ingress hop joins it.
+# camouflare is deliberately NOT on the shared `coolify` bridge: that bridge
+# carries ~50 other containers and this service fetches caller-supplied URLs, so
+# sharing it let a token holder read http://coolify:8080. Only the ingress hop
+# and Prowlarr join it, because Traefik routes to them.
 services:
   camouflare:
     image: mehmetcansahin/camouflare:2.1.0
@@ -45,8 +48,8 @@ services:
     networks: [arr]
 
   camouflare-auth:
-    # Config is baked into the image: Coolify drops relative bind mounts, and
-    # the stock nginx config would listen on :80 instead of :8191.
+    # Config is baked into the image: Coolify drops relative bind mounts, and the
+    # stock nginx config would listen on :80 instead of :8191.
     build:
       context: ./conf
     image: camouflare-auth:local
@@ -54,21 +57,6 @@ services:
     depends_on: [camouflare]
     expose: ["8191"]
     networks: [arr, coolify]
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=coolify
-      - traefik.http.routers.cf-http.entrypoints=http
-      - traefik.http.routers.cf-http.rule=Host(`camouflare.382972.xyz`)
-      - traefik.http.routers.cf-http.middlewares=cf-tohttps
-      - traefik.http.middlewares.cf-tohttps.redirectscheme.scheme=https
-      - traefik.http.routers.cf-https.entrypoints=https
-      - traefik.http.routers.cf-https.rule=Host(`camouflare.382972.xyz`)
-      - traefik.http.routers.cf-https.tls=true
-      - traefik.http.routers.cf-https.tls.certresolver=letsencrypt
-      - traefik.http.routers.cf-https.middlewares=cf-inflight
-      - traefik.http.middlewares.cf-inflight.inflightreq.amount=4
-      - traefik.http.routers.cf-https.service=cf-svc
-      - traefik.http.services.cf-svc.loadbalancer.server.port=8191
 
   camouflare-shim:
     build:
@@ -99,23 +87,6 @@ services:
       - /data/prowlarr/config:/config
     expose: ["9696"]
     networks: [arr, coolify]
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=coolify
-      - traefik.http.routers.pl-http.entrypoints=http
-      - traefik.http.routers.pl-http.rule=Host(`prowlarr.382972.xyz`)
-      - traefik.http.routers.pl-http.middlewares=pl-tohttps
-      - traefik.http.middlewares.pl-tohttps.redirectscheme.scheme=https
-      - traefik.http.routers.pl-https.entrypoints=https
-      - traefik.http.routers.pl-https.rule=Host(`prowlarr.382972.xyz`)
-      - traefik.http.routers.pl-https.tls=true
-      - traefik.http.routers.pl-https.tls.certresolver=letsencrypt
-      - traefik.http.routers.pl-https.middlewares=pl-auth
-      # Hash only; the password lives in /data/prowlarr/credentials.env on the host.
-      # Inlined because Coolify escapes ${...} inside labels, so it cannot be an env ref.
-      - traefik.http.middlewares.pl-auth.basicauth.users=admin:$apr1$FCDsI.f6$2Fhlks104HB6AvOqXkAIr0
-      - traefik.http.routers.pl-https.service=pl-svc
-      - traefik.http.services.pl-svc.loadbalancer.server.port=9696
 
 networks:
   arr:
